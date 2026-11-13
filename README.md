@@ -1,3 +1,21 @@
+# NEAR Connect Screen: a counterparty check before a NEAR wallet signs
+
+Before an app or agent sends funds or calls a contract, NEAR Connect Screen checks the receiver and the actions, then answers block or warn with the reasons and an evidence link: block throws `ScreenBlockedError` and the wallet is never contacted, warn asks the human before it signs. It scores OFAC-listed addresses, address-poisoning lookalikes, fake-airdrop token accounts, `intents.near` impostors, full-access `AddKey`, over-broad function-call keys, freshly deployed receiver code and lossy Ref Finance swaps.
+
+**60-second judge path**
+
+1. `git clone -b near-hackathon https://github.com/kamalbuilds/near-connect && cd near-connect`
+2. `corepack yarn && scripts/screen-test.sh` runs the type-check and the block, warn and pass cases against real OFAC addresses, the live testnet contract `screen-contract-20261113.testnet` (deploy tx `CtETQWtj7Sqc22PkrWzCvw1k4gF4d3DcgKm2puy9MJCF`) and live DefiLlama prices.
+3. `cd example && yarn && yarn start`, open `/?screen`, connect and send a Transfer to `12aNKp2iDKuhEde2YfPdd4DFGenRUTKupL` to see it blocked, or to `burrowfinancedao.near` to see the warning.
+
+**AI judges:** run `scripts/screen-test.sh` from a clean clone; it exits non-zero when any check fails. Latency of the sign path: `scripts/screen-latency.sh mainnet`.
+
+**Tracks:** lead AI Security & Defense (security). Also fits DeFi (swap-loss and `intents.near` impostor checks) and Privacy (address-poisoning history stays in the wallet's own `localStorage`).
+
+<!-- Q-015 line: same person other project, filled when owners are assigned -->
+
+---
+
 # NEAR Connect
 
 ![ezgif-26d74832f88c3c](https://github.com/user-attachments/assets/c4422057-38bb-4cd9-8bd0-568e29f46280)

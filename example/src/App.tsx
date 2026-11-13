@@ -83,7 +83,10 @@ export const ExampleNEAR: FC = () => {
 
   return (
     <div className="view">
-      <p>NEAR Example</p>
+      <h1>Stop a bad payment before the wallet signs</h1>
+      <p className={smallGreyText}>
+        Every transaction is checked against OFAC, fake-airdrop and lookalike lists first. Add ?screen to the URL: a block never reaches the wallet, a warning asks you.
+      </p>
       <NetworkSelector
         network={network}
         onSelectNetwork={(network) => {
