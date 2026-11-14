@@ -16,6 +16,10 @@ const PRESETS: Record<string, string> = {
 };
 // The judge account deploys a throwaway contract on testnet; Screen then sees code that is minutes old.
 let fresh: { account: string; explorer: string } | null = null;
+// A real unscreened send to the sanctioned address, made through this same page. Its block is read back from testnet on load.
+const RECORDED = { tx: "ESjrFydusjWtGKSjmT2zkN2ZbPsfGVxSYMZG1qMpvTTY", from: "screen-sponsor-1114.testnet" };
+let recorded: { height: number; when: string } | null = null;
+let ran = false;
 const AMOUNT_YOCTO = "10000000000000000000000";
 const OPTIONS: ScreenOptions = {};
 const NEARBLOCKS = "https://testnet.nearblocks.io/txns/";
@@ -54,6 +58,9 @@ const render = (lane: Lane, verdictHtml = "") => {
     .map((s, i) => `<li data-s="${s.state}"><span class="dot" aria-hidden="true">${mark[s.state]}</span><div><div class="t">${esc(s.title)}</div>${s.detail || s.html ? `<div class="d">${s.html ?? esc(s.detail!)}</div>` : ""}${i === 1 && lane === "screen" ? verdictHtml : ""}</div></li>`)
     .join("");
   $(`n-${lane}`).textContent = String(counts[lane]);
+  const verdict = latest ? verdictOf(latest.checks) : "clear";
+  $(`n-${lane}`).className = lane === "plain" ? (counts.plain > 0 && verdict === "block" ? "hit" : "") : (counts.screen === 0 && verdict === "block" ? "held" : "");
+  $("cap-plain").textContent = !ran && counts.plain > 0 ? "Wallet signing requests, recorded run" : "Wallet signing requests";
 };
 
 const recipientNow = () => {
@@ -86,6 +93,13 @@ const idleSteps = (recipient: string): Record<Lane, Step[]> => ({
     { state: "idle", title: "Testnet transaction", detail: "Not sent yet." },
   ],
 });
+
+const recordedSteps = (recipient: string): Step[] => [
+  { state: "pass", title: "App sends 0.01 NEAR", ...toLine(recipient) },
+  { state: "skip", title: "Screening", detail: "Not installed. Nothing reads the recipient." },
+  { state: "pass", title: "Wallet signs without a question", detail: `Recorded run, signed by ${RECORDED.from}.` },
+  { state: "bad", title: "Funds reached the flagged recipient", html: `<a href="${NEARBLOCKS + RECORDED.tx}" target="_blank" rel="noreferrer">${esc(short(RECORDED.tx))}</a> finalized on testnet${recorded ? ` at block ${recorded.height.toLocaleString("en-US")}, ${esc(recorded.when)}` : ""}` },
+];
 
 const fmtMs = (ms: number) => (ms < 1 ? "under 1 ms" : ms < 10 ? `${ms.toFixed(1)} ms` : ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
 
@@ -132,6 +146,12 @@ const runCheck = async () => {
   const base = idleSteps(recipient || "…");
   steps.plain = base.plain;
   steps.screen = base.screen;
+  counts.plain = 0;
+  counts.screen = 0;
+  if (!ran && document.querySelector<HTMLInputElement>('input[name="pick"]:checked')?.value === "sanctioned") {
+    counts.plain = 1;
+    steps.plain = recordedSteps(recipient);
+  }
   $("summary").textContent = "";
   render("plain");
   render("screen");
@@ -253,6 +273,7 @@ $("try").addEventListener("submit", async (event) => {
   }
   if (!recipient) { $<HTMLInputElement>("own").focus(); return; }
   busy = true;
+  ran = true;
   counts.plain = 0;
   counts.screen = 0;
   const button = $<HTMLButtonElement>("send");
@@ -302,3 +323,13 @@ const setWallet = () => {
 };
 
 fetch("/api/config").then((r) => r.json()).then((c) => { if (c.signer) signer = c.signer; }).catch(() => {}).finally(() => void runCheck());
+
+fetch("/api/rpc", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ method: "tx", params: { tx_hash: RECORDED.tx, sender_account_id: RECORDED.from, wait_until: "FINAL" } }) })
+  .then((r) => r.json())
+  .then((body) => fetch("/api/rpc", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ method: "block", params: { block_id: body.result.transaction_outcome.block_hash } }) }))
+  .then((r) => r.json())
+  .then((body) => {
+    recorded = { height: Number(body.result.header.height), when: new Date(Number(body.result.header.timestamp_nanosec) / 1e6).toISOString().replace("T", " ").slice(0, 16) + " UTC" };
+    if (!ran && !busy && document.querySelector<HTMLInputElement>('input[name="pick"]:checked')?.value === "sanctioned" && latest) { steps.plain = recordedSteps(latest.recipient); render("plain"); }
+  })
+  .catch(() => {});

@@ -97,7 +97,7 @@ li[data-s=bad] .dot { background: var(--stop-ink); border-color: var(--stop-ink)
 
 .lane footer { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 0 16px; margin-top: 8px; font-size: 14.5px; color: var(--muted); border-top: 2px solid rgba(128,128,128,.22); }
 .screened footer { color: var(--on-dark-muted); }
-.lane footer b { font-size: 28px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1; }
+.lane footer b { font-size: 52px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1; }
 .screened footer b { color: var(--on-dark); }
 
 #summary { margin-top: 14px; font-size: 17px; font-weight: 500; max-width: 64em; min-height: 26px; }
@@ -170,3 +170,6 @@ th { font-size: 14px; color: var(--muted); font-weight: 600; }
   .wallet { padding-top: 28px; padding-bottom: 28px; }
 }
 @media (prefers-reduced-motion: reduce) { li[data-s=run] .dot { animation: none; } }
+
+.plain footer b.hit { color: var(--stop-ink); }
+.screened footer b.held { color: var(--pass-on-dark); }

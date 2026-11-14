@@ -17,7 +17,7 @@
 
 <main>
 <section class="top">
-  <h1>Screen stops a bad transaction before any wallet sees it.</h1>
+  <h1>Screen stops a bad NEAR transaction before any wallet sees it.</h1>
   <p class="lede">Send 0.01 testnet NEAR to a recipient below. The same app, the same wallet, with and without Screen. The judge account signs on testnet, so you need no wallet and no funds.</p>
 </section>
 
@@ -37,7 +37,7 @@
     <article class="lane plain" id="lane-plain" aria-live="polite">
       <header><h2>Without Screen</h2><p>Connector as it ships today</p></header>
       <ol class="steps" id="steps-plain"></ol>
-      <footer><span>Wallet signing requests</span><b id="n-plain">0</b></footer>
+      <footer><span id="cap-plain">Wallet signing requests</span><b id="n-plain">0</b></footer>
     </article>
     <article class="lane screened" id="lane-screen" aria-live="polite">
       <header><h2>With Screen</h2><p>One option: <code>new NearConnector({ screen: {} })</code></p></header>
