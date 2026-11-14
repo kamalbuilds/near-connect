@@ -39,17 +39,17 @@ const u128 = (n) => concat(u64(BigInt(n) & ((1n << 64n) - 1n)), u64(BigInt(n) >>
 const str = (s) => { const e = enc.encode(s); return concat(u32(e.length), e); };
 
 const rpc = async (method, params, urls = RPCS) => {
-  let last;
+  const attempts = [];
   for (const url of urls) {
     try {
       const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: "screen", method, params }), signal: AbortSignal.timeout(20000) });
       const body = await response.json();
       const definitive = !body.error || body.error.cause || body.error.name === "HANDLER_ERROR" || body.error.data?.TxExecutionError;
-      if (!definitive) { last = new Error("RPC unavailable"); continue; }
+      if (!definitive) { attempts.push(`${new URL(url).host} ${JSON.stringify(body.error).slice(0, 120)}`); continue; }
       return body;
-    } catch (error) { last = error; }
+    } catch (error) { attempts.push(`${new URL(url).host} ${error.message}`); }
   }
-  throw last ?? new Error("No testnet RPC answered");
+  throw new Error(`No testnet RPC answered: ${attempts.join("; ")}`);
 };
 
 const receiverOk = (id) => typeof id === "string" && id.length >= 2 && id.length <= 64 && /^(?:[a-z0-9]+[._-])*[a-z0-9]+$/.test(id);
@@ -162,7 +162,7 @@ export default {
       return env.ASSETS.fetch(request);
     } catch (error) {
       if (error instanceof HttpError) return json(error.status, { error: error.message, ...error.extra }, error.extra.retryAfter ? { "retry-after": String(error.extra.retryAfter) } : {});
-      return json(502, { error: "The testnet did not answer. Try again." });
+      return json(502, { error: "The testnet did not answer. Try again.", detail: String(error.message ?? error).slice(0, 400) });
     }
   },
 };
