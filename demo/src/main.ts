@@ -60,6 +60,10 @@ const render = (lane: Lane, verdictHtml = "") => {
   $(`n-${lane}`).textContent = String(counts[lane]);
   const verdict = latest ? verdictOf(latest.checks) : "clear";
   $(`n-${lane}`).className = lane === "plain" ? (counts.plain > 0 && verdict === "block" ? "hit" : "") : (counts.screen === 0 && verdict === "block" ? "held" : "");
+  $("s-plain").textContent = String(counts.plain);
+  $("s-screen").textContent = String(counts.screen);
+  $("s-plain").className = $("n-plain").className;
+  $("s-screen").className = $("n-screen").className;
   $("cap-plain").textContent = !ran && counts.plain > 0 ? "Wallet signing requests, recorded run" : "Wallet signing requests";
 };
 

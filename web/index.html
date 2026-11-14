@@ -18,7 +18,8 @@
 <main>
 <section class="top">
   <h1>Screen stops a bad NEAR transaction before any wallet sees it.</h1>
-  <p class="lede">Send 0.01 testnet NEAR to a recipient below. The same app, the same wallet, with and without Screen. The judge account signs on testnet, so you need no wallet and no funds.</p>
+  <p class="lede">One option on NEAR Connect reads the recipient and every action before the wallet is asked. Send 0.01 testnet NEAR below, with and without Screen. The judge account signs on testnet, so you need no wallet and no funds.</p>
+  <p class="chip"><code>new NearConnector({ screen: {} })</code></p>
 </section>
 
 <section class="stage" aria-label="Try Screen on NEAR testnet">
@@ -33,16 +34,17 @@
     <button id="send" type="submit">Send 0.01 NEAR</button>
   </form>
 
+  <div class="strip" aria-hidden="true"><div><b id="s-plain">0</b><span>Without Screen</span></div><div><b id="s-screen">0</b><span>With Screen</span></div></div>
   <div class="lanes">
     <article class="lane plain" id="lane-plain" aria-live="polite">
-      <header><h2>Without Screen</h2><p>Connector as it ships today</p></header>
+      <header><div><h2>Without Screen</h2><p>Connector as it ships today</p></div><div class="tally"><b id="n-plain">0</b><span id="cap-plain">Wallet signing requests</span></div></header>
       <ol class="steps" id="steps-plain"></ol>
-      <footer><span id="cap-plain">Wallet signing requests</span><b id="n-plain">0</b></footer>
+      
     </article>
     <article class="lane screened" id="lane-screen" aria-live="polite">
-      <header><h2>With Screen</h2><p>One option: <code>new NearConnector({ screen: {} })</code></p></header>
+      <header><div><h2>With Screen</h2><p>Same connector, one option added</p></div><div class="tally"><b id="n-screen">0</b><span>Wallet signing requests</span></div></header>
       <ol class="steps" id="steps-screen"></ol>
-      <footer><span>Wallet signing requests</span><b id="n-screen">0</b></footer>
+      
     </article>
   </div>
   <p id="summary" role="status"></p>
