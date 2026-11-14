@@ -1,7 +1,5 @@
 # NEAR Connect Screen: a counterparty check before a NEAR wallet signs
 
-![judge](https://github.com/kamalbuilds/near-connect/actions/workflows/judge.yml/badge.svg?branch=near-hackathon)
-
 Before an app or agent sends funds or calls a contract, NEAR Connect Screen checks the receiver and the actions, then answers block or warn with the reasons and an evidence link. A block throws `ScreenBlockedError` and the wallet is never contacted. A warn opens a dialog that asks a human before the wallet signs. One option turns it on for every wallet the connector reaches: `new NearConnector({ screen: {} })`.
 
 **Try it in 60 seconds, on testnet, with no wallet and no funds:** https://near-screen.earn-shield-alerts.workers.dev
