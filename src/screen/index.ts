@@ -136,25 +136,64 @@ const request = async (url: string, method: string, params: Record<string, unkno
   return data.result;
 };
 
-const blockAtTimestamp = async (url: string, latestHeight: number, timestamp: number) => {
+// NEAR skips heights now and then; a missing height is not an error, the next block stands in for it.
+const blockNear = async (url: string, height: number, ceiling: number) => {
+  for (let candidate = height; candidate <= Math.min(height + 16, ceiling); candidate++) {
+    try {
+      return await request(url, "block", { block_id: candidate });
+    } catch (error) {
+      if (!String(error).includes("UNKNOWN_BLOCK")) throw error;
+    }
+  }
+  throw new Error("UNKNOWN_BLOCK");
+};
+
+// Blocks arrive at a steady rate, so the height for a timestamp is found by interpolation in a handful of reads.
+// A block within a minute of the timestamp is accepted; bisection finishes the rare case that does not converge.
+const SETTLED_MS = 60_000;
+const blockAtTimestamp = async (url: string, latest: { height: number; timestamp_nanosec: string | number }, timestamp: number) => {
+  const latestHeight = Number(latest.height);
   const key = `${url}:${Math.round(timestamp / 3600000)}`;
   const cached = recentHeights.get(key);
   if (cached && Date.now() - cached.timestamp < 30000) return cached.height;
-  let low = Math.max(1, latestHeight - 172800);
-  let lowBlock = await request(url, "block", { block_id: low });
-  while (Number(lowBlock.header.timestamp_nanosec) / 1e6 > timestamp && low > 1) {
-    low = Math.max(1, low - (latestHeight - low));
-    lowBlock = await request(url, "block", { block_id: low });
+  const stamp = (block: { header: { timestamp_nanosec: string | number } }) => Number(block.header.timestamp_nanosec) / 1e6;
+  const done = (height: number) => {
+    recentHeights.set(key, { height, timestamp: Date.now() });
+    return height;
+  };
+  let high = { height: latestHeight, ms: Number(latest.timestamp_nanosec) / 1e6 };
+  let low: { height: number; ms: number } | undefined;
+  let guess = Math.max(1, Math.round(high.height - (high.ms - timestamp) / 1000));
+  for (let step = 0; step < 6 && guess > 1 && guess < high.height; step++) {
+    const block = await blockNear(url, guess, high.height - 1);
+    const point = { height: Number(block.header.height), ms: stamp(block) };
+    if (Math.abs(point.ms - timestamp) <= SETTLED_MS) return done(point.height);
+    if (point.ms < timestamp) low = point;
+    else high = point;
+    if (low && high.height - low.height <= 1) break;
+    const known = low && high.height !== latestHeight ? { from: low, to: high } : { from: point, to: { height: latestHeight, ms: Number(latest.timestamp_nanosec) / 1e6 } };
+    const perMs = Math.abs((known.to.height - known.from.height) / (known.to.ms - known.from.ms));
+    const next = point.height + (timestamp - point.ms) * perMs;
+    guess = Math.round(Math.min(Math.max(next, (low?.height ?? 0) + 1), high.height - 1));
   }
-  let high = latestHeight;
-  while (high - low > 1) {
-    const mid = Math.floor((low + high) / 2);
-    const block = await request(url, "block", { block_id: mid });
-    if (Number(block.header.timestamp_nanosec) / 1e6 < timestamp) low = mid;
-    else high = mid;
+  if (!low) {
+    let probe = Math.max(1, latestHeight - 172800);
+    let probeBlock = await blockNear(url, probe, latestHeight);
+    while (stamp(probeBlock) > timestamp && probe > 1) {
+      probe = Math.max(1, probe - (latestHeight - probe));
+      probeBlock = await blockNear(url, probe, latestHeight);
+    }
+    low = { height: Number(probeBlock.header.height), ms: stamp(probeBlock) };
   }
-  recentHeights.set(key, { height: high, timestamp: Date.now() });
-  return high;
+  let floor = low.height;
+  let ceiling = high.height;
+  while (ceiling - floor > 1) {
+    const block = await blockNear(url, Math.floor((floor + ceiling) / 2), ceiling - 1);
+    const height = Number(block.header.height);
+    if (stamp(block) < timestamp) floor = height;
+    else ceiling = height;
+  }
+  return done(ceiling);
 };
 
 const contractChecks = async (accountId: string, network: Network, hours: number): Promise<ScreenCheck[]> => {
@@ -163,7 +202,7 @@ const contractChecks = async (accountId: string, network: Network, hours: number
   try {
     const latest = await request(url, "block", { finality: "final" });
     const targetTime = Number(latest.header.timestamp_nanosec) / 1e6 - hours * 3600000;
-    const oldHeight = await blockAtTimestamp(url, latest.header.height, targetTime);
+    const oldHeight = await blockAtTimestamp(url, latest.header, targetTime);
     const viewAccount = (block: Record<string, unknown>) => request(url, "query", { request_type: "view_account", account_id: accountId, ...block });
     const [currentAccount, oldAccount] = await Promise.allSettled([
       viewAccount({ finality: "final" }),
