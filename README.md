@@ -2,7 +2,7 @@
 
 Before an app or agent sends funds or calls a contract, NEAR Connect Screen checks the receiver and the actions, then answers block or warn with the reasons and an evidence link. A block throws `ScreenBlockedError` and the wallet is never contacted. A warn opens a dialog that asks a human before the wallet signs. One option turns it on for every wallet the connector reaches: `new NearConnector({ screen: {} })`.
 
-**Try it in 60 seconds, on testnet, with no wallet and no funds:** https://near-screen.earn-shield-alerts.workers.dev
+**Try it in 60 seconds, on testnet, with no wallet and no funds:** https://near-screen.nearbuild.workers.dev
 
 1. Open the page. Sanctioned address is selected, and the With Screen lane already shows **Block** with the OFAC reason and its evidence link.
 2. Press **Send 0.01 NEAR**. Without Screen, the wallet signs and 0.01 testnet NEAR lands at the sanctioned `0x252a…3bce` (a NearBlocks testnet link appears). With Screen, the request travels down its lane and stops at the Screen gate in under a millisecond, and the wallet signing counter stays at 0. The strip under the lanes names the OFAC list date, the address count and the testnet block the check read. **Post this result on X** shares the outcome with the transaction link.

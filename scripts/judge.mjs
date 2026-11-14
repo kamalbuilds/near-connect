@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // One command that proves the hosted demo on a clean machine: live page, configured judge account, chain relay,
 // a real testnet send read back from an independent RPC, and the evidence transactions in COMPANY.md.
-const BASE = process.env.SCREEN_URL ?? "https://near-screen.earn-shield-alerts.workers.dev";
+const BASE = process.env.SCREEN_URL ?? "https://near-screen.nearbuild.workers.dev";
 const RPCS = ["https://near-testnet.drpc.org", "https://archival-rpc.testnet.fastnear.com"];
 const checks = [];
 const check = async (name, run) => {
