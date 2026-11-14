@@ -5,7 +5,7 @@ Before an app or agent sends funds or calls a contract, NEAR Connect Screen chec
 **Try it in 60 seconds, on testnet, with no wallet and no funds:** https://near-screen.earn-shield-alerts.workers.dev
 
 1. Open the page. Sanctioned address is selected, and the With Screen lane already shows **Block** with the OFAC reason and its evidence link.
-2. Press **Send 0.01 NEAR**. Without Screen, the wallet signs and 0.01 testnet NEAR lands at the sanctioned `0x252a…3bce` (a NearBlocks testnet link appears). With Screen, the transaction stops in under a millisecond and the wallet signing counter stays at 0.
+2. Press **Send 0.01 NEAR**. Without Screen, the wallet signs and 0.01 testnet NEAR lands at the sanctioned `0x252a…3bce` (a NearBlocks testnet link appears). With Screen, the request travels down its lane and stops at the Screen gate in under a millisecond, and the wallet signing counter stays at 0. The strip under the lanes names the OFAC list date, the address count and the testnet block the check read. **Post this result on X** shares the outcome with the transaction link.
 3. Pick **Contract deployed minutes ago**. The judge account deploys a fresh contract on testnet, Screen warns, you press Continue anyway, and the wallet signs after the warning.
 4. Pick **Established account**. Screen clears it and the transfer goes through with a real testnet transaction.
 5. Press **Connect a testnet wallet** to run the With Screen lane through your own Meteor or Intear account.
