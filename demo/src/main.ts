@@ -12,11 +12,12 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
 
 const PRESETS: Record<string, string> = {
   sanctioned: "0x252a8bd2319d8a555b872990601221b3a2053bce",
-  fresh: "screen-fresh-1114.testnet",
   clean: "guest-book.testnet",
 };
+// The judge account deploys a throwaway contract on testnet; Screen then sees code that is minutes old.
+let fresh: { account: string; explorer: string } | null = null;
 const AMOUNT_YOCTO = "10000000000000000000000";
-const OPTIONS: ScreenOptions = { contractFreshnessHours: 168 };
+const OPTIONS: ScreenOptions = {};
 const NEARBLOCKS = "https://testnet.nearblocks.io/txns/";
 
 type StepState = "idle" | "run" | "pass" | "block" | "warn" | "skip" | "bad";
@@ -25,7 +26,7 @@ type Lane = "plain" | "screen";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-const short = (id: string) => (id.length > 26 ? `${id.slice(0, 10)}…${id.slice(-6)}` : id);
+const short = (id: string) => (id.length > 26 && !id.includes(".") ? `${id.slice(0, 10)}…${id.slice(-6)}` : id);
 const mark: Record<StepState, string> = { idle: "", run: "", pass: "✓", block: "×", warn: "!", skip: "–", bad: "×" };
 
 let signer = "screen-sponsor-1114.testnet";
@@ -57,7 +58,7 @@ const render = (lane: Lane, verdictHtml = "") => {
 
 const recipientNow = () => {
   const pick = (document.querySelector<HTMLInputElement>('input[name="pick"]:checked')?.value ?? "sanctioned") as string;
-  return pick === "own" ? $<HTMLInputElement>("own").value.trim().toLowerCase() : PRESETS[pick];
+  return pick === "own" ? $<HTMLInputElement>("own").value.trim().toLowerCase() : pick === "fresh" ? (fresh?.account ?? "") : PRESETS[pick];
 };
 
 const verdictOf = (checks: ScreenCheck[]) => (checks.some((c) => c.level === "block") ? "block" : checks.some((c) => c.level === "warn") ? "warn" : "clear");
@@ -65,25 +66,28 @@ const verdictHtml = (checks: ScreenCheck[], ms: number) => {
   const v = verdictOf(checks);
   const label = v === "block" ? "Block" : v === "warn" ? "Warn" : "Clear";
   const items = checks.map((c) => `<li>${esc(c.reason)} <a href="${esc(c.evidence_url)}" target="_blank" rel="noreferrer">Evidence</a></li>`).join("");
-  return `<div class="verdict" data-v="${v}"><div class="head"><span class="chip">${label}</span><span>decided in ${ms} ms</span></div><ul>${items}</ul></div>`;
+  return `<div class="verdict" data-v="${v}"><div class="head"><span class="chip">${label}</span><span>decided in ${fmtMs(ms)}</span></div><ul>${items}</ul></div>`;
 };
+
+const toLine = (recipient: string): Pick<Step, "detail" | "html"> =>
+  fresh && recipient === fresh.account ? { html: `to ${esc(short(recipient))}, deployed minutes ago in <a href="${esc(fresh.explorer)}" target="_blank" rel="noreferrer">this transaction</a>` } : { detail: `to ${short(recipient)}` };
 
 const idleSteps = (recipient: string): Record<Lane, Step[]> => ({
   plain: [
-    { state: "pass", title: "App sends 0.01 NEAR", detail: `to ${short(recipient)}` },
+    { state: "pass", title: "App sends 0.01 NEAR", ...toLine(recipient) },
     { state: "skip", title: "Screening", detail: "Not installed. Nothing reads the recipient." },
     { state: "idle", title: "Wallet asked to sign", detail: "Waiting for your send." },
     { state: "idle", title: "Testnet transaction", detail: "Not sent yet." },
   ],
   screen: [
-    { state: "pass", title: "App sends 0.01 NEAR", detail: `to ${short(recipient)}` },
+    { state: "pass", title: "App sends 0.01 NEAR", ...toLine(recipient) },
     { state: "run", title: "Screen checks the recipient", detail: "Reading OFAC and NEAR account lists, contract history." },
     { state: "idle", title: "Wallet asked to sign", detail: "Waiting for Screen." },
     { state: "idle", title: "Testnet transaction", detail: "Not sent yet." },
   ],
 });
 
-const fmtMs = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
+const fmtMs = (ms: number) => (ms < 1 ? "under 1 ms" : ms < 10 ? `${ms.toFixed(1)} ms` : ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
 
 const applyCheck = (recipient: string, checks: ScreenCheck[], ms: number) => {
   const v = verdictOf(checks);
@@ -95,9 +99,35 @@ const applyCheck = (recipient: string, checks: ScreenCheck[], ms: number) => {
   latest = { recipient, checks, ms };
 };
 
+const ensureFresh = async (token: number) => {
+  if (fresh) return true;
+  steps.plain = idleSteps("…").plain;
+  steps.screen = idleSteps("…").screen;
+  steps.screen[0] = { state: "run", title: "Deploying a contract on testnet", detail: "The judge account is publishing a new contract so Screen has something recent to see." };
+  steps.screen[1] = { state: "idle", title: "Screen checks the recipient", detail: "Waiting for the contract." };
+  render("plain");
+  render("screen");
+  try {
+    const response = await fetch("/api/fresh");
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error);
+    if (token !== checkToken) return false;
+    fresh = { account: body.account, explorer: body.explorer };
+    const label = document.querySelector<HTMLElement>('input[value="fresh"] + span i');
+    if (label) label.textContent = short(body.account);
+    return true;
+  } catch (error) {
+    if (token !== checkToken) return false;
+    steps.screen[0] = { state: "bad", title: "Could not deploy the contract", detail: (error as Error).message + " Pick it again to retry." };
+    render("screen");
+    return false;
+  }
+};
+
 const runCheck = async () => {
-  const recipient = recipientNow();
   const token = ++checkToken;
+  if (document.querySelector<HTMLInputElement>('input[name="pick"]:checked')?.value === "fresh" && !(await ensureFresh(token))) return;
+  const recipient = recipientNow();
   latest = null;
   const base = idleSteps(recipient || "…");
   steps.plain = base.plain;
@@ -114,7 +144,7 @@ const runCheck = async () => {
   try {
     const checks = await screenTransaction({ receiverId: recipient, actions: [{ type: "Transfer", params: { deposit: AMOUNT_YOCTO } }] }, "testnet", walletAccount ?? signer, OPTIONS);
     if (token !== checkToken) return;
-    applyCheck(recipient, checks, Math.round(performance.now() - started));
+    applyCheck(recipient, checks, performance.now() - started);
   } catch (error) {
     if (token !== checkToken) return;
     steps.screen[1] = { state: "bad", title: "Screen could not read the chain", detail: "Testnet did not answer. Pick the recipient again to retry." };
@@ -183,7 +213,7 @@ const runScreen = async (recipient: string) => {
     return { ok: true as const };
   } catch (error) {
     if (error instanceof ScreenBlockedError) {
-      const ms = Math.round(performance.now() - started);
+      const ms = performance.now() - started;
       applyCheck(recipient, error.checks, latest?.recipient === recipient ? latest.ms : ms);
       return { ok: false as const, blocked: true as const };
     }
@@ -216,7 +246,11 @@ const summarize = (recipient: string, plain: Awaited<ReturnType<typeof runPlain>
 $("try").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy) return;
-  const recipient = recipientNow();
+  let recipient = recipientNow();
+  if (!recipient && document.querySelector<HTMLInputElement>('input[name="pick"]:checked')?.value === "fresh") {
+    await runCheck();
+    recipient = recipientNow();
+  }
   if (!recipient) { $<HTMLInputElement>("own").focus(); return; }
   busy = true;
   counts.plain = 0;

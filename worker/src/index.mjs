@@ -8,6 +8,14 @@ const AMOUNT_YOCTO = 10n ** 22n; // 0.01 NEAR per send
 const PKCS8_ED25519 = Buffer.from("302e020100300506032b657004220420", "hex");
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const enc = new TextEncoder();
+// A 25-byte module that imports the runtime memory and exports nothing. NEAR accepts it as a contract.
+const EMPTY_CONTRACT = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0, 2, 15, 1, 3, 101, 110, 118, 6, 109, 101, 109, 111, 114, 121, 2, 0, 1]);
+const FRESH_TTL_MS = 6 * 3_600_000;
+const ACTION = {
+  createAccount: () => Uint8Array.of(0),
+  deploy: (code) => concat(Uint8Array.of(1), u32(code.length), code),
+  transfer: (yocto) => concat(Uint8Array.of(3), u128(yocto)),
+};
 
 const json = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store", ...headers } });
 
@@ -81,12 +89,30 @@ export class ScreenState extends DurableObject {
 
   // Signing is serialized here so two sends from one key never share a nonce.
   send(receiverId) {
-    const run = this.chain.then(() => this.signAndSend(receiverId).catch((error) => ({ ok: false, status: error.status ?? 502, error: error instanceof HttpError ? error.message : "The testnet did not answer. Try again.", ...(error.extra ?? {}) })));
+    return this.queue(() => this.signAndSend(receiverId, [ACTION.transfer(AMOUNT_YOCTO)]));
+  }
+
+  // The newest throwaway contract, deployed on testnet by the judge account and replaced after six hours.
+  fresh() {
+    return this.queue(async () => {
+      const current = await this.ctx.storage.get("fresh");
+      if (current && Date.now() - current.deployedAt < FRESH_TTL_MS) return { ok: true, ...current };
+      const account = `fresh${Date.now().toString(36)}.${this.env.SPONSOR_ID}`;
+      const sent = await this.signAndSend(account, [ACTION.createAccount(), ACTION.transfer(2n * 10n ** 22n), ACTION.deploy(EMPTY_CONTRACT)]);
+      if (!sent.ok) return sent;
+      const record = { account, txHash: sent.txHash, explorer: sent.explorer, deployedAt: Date.now() };
+      await this.ctx.storage.put("fresh", record);
+      return { ok: true, ...record };
+    });
+  }
+
+  queue(task) {
+    const run = this.chain.then(() => task().catch((error) => ({ ok: false, status: error.status ?? 502, error: error instanceof HttpError ? error.message : "The testnet did not answer. Try again.", ...(error.extra ?? {}) })));
     this.chain = run.catch(() => {});
     return run;
   }
 
-  async signAndSend(receiverId) {
+  async signAndSend(receiverId, actions) {
     const env = this.env;
     if (!env.SPONSOR_KEY) throw new HttpError(503, "The judge account is not configured on this deployment.");
     const started = Date.now();
@@ -104,7 +130,7 @@ export class ScreenState extends DurableObject {
       const stored = (await this.ctx.storage.get("nonce")) ?? 0;
       const nonce = Math.max(Number(keyResult.result.nonce), stored) + 1;
       await this.ctx.storage.put("nonce", nonce);
-      const body = concat(str(accountId), Uint8Array.of(0), publicKey, u64(nonce), str(receiverId), decodeBase58(blockResult.result.header.hash), u32(1), Uint8Array.of(3), u128(AMOUNT_YOCTO));
+      const body = concat(str(accountId), Uint8Array.of(0), publicKey, u64(nonce), str(receiverId), decodeBase58(blockResult.result.header.hash), u32(actions.length), ...actions);
       const signature = signBytes(null, createHash("sha256").update(body).digest(), privateKey);
       const signed = concat(body, Uint8Array.of(0), signature);
       const result = await rpc("send_tx", { signed_tx_base64: Buffer.from(signed).toString("base64"), wait_until: "INCLUDED" });
@@ -143,6 +169,11 @@ export default {
         let answer = await rpc(payload.method, payload.params);
         if (historic && answer.error?.cause?.name === "UNKNOWN_BLOCK") answer = await rpc(payload.method, payload.params, ARCHIVAL);
         return json(200, { ...answer, id: payload.id ?? answer.id });
+      }
+      if (url.pathname === "/api/fresh") {
+        const fresh = await env.STATE.get(env.STATE.idFromName("screen")).fresh();
+        if (!fresh.ok) throw new HttpError(fresh.status, fresh.error);
+        return json(200, fresh);
       }
       if (url.pathname === "/api/send") {
         if (request.method !== "POST") throw new HttpError(405, "POST only");
