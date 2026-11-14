@@ -11,8 +11,8 @@
   --pass: #1d7a4b;
   --pass-on-dark: #62d39b;
   --warn: #c98a0c;
-  --pad: max(20px, env(safe-area-inset-left, 0px));
-  --padr: max(20px, env(safe-area-inset-right, 0px));
+  --pad: max(32px, env(safe-area-inset-left, 0px));
+  --padr: max(32px, env(safe-area-inset-right, 0px));
   --font: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; }
@@ -25,12 +25,12 @@ button, input { font: inherit; color: inherit; }
 :focus-visible { outline: 3px solid var(--stop); outline-offset: 2px; }
 
 .bar, main > section, .close { padding-left: var(--pad); padding-right: var(--padr); }
-.bar { display: flex; align-items: center; justify-content: space-between; height: 60px; max-width: 1440px; margin: 0 auto; }
+.bar { display: flex; align-items: center; justify-content: space-between; height: 60px; max-width: 1400px; margin: 0 auto; }
 .mark { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; text-decoration: none; letter-spacing: -.02em; }
 .bar nav { display: flex; gap: 28px; font-size: 15px; }
 .bar nav a { text-decoration: none; }
 .bar nav a:hover { text-decoration: underline; }
-main { max-width: 1440px; margin: 0 auto; }
+main { max-width: 1400px; margin: 0 auto; }
 
 .top { padding-top: 22px; padding-bottom: 22px; }
 h1 { font-size: clamp(2.15rem, 5.2vw, 4.9rem); line-height: 1; letter-spacing: -.04em; font-weight: 650; max-width: 14em; }
@@ -141,6 +141,7 @@ th { font-size: 14px; color: var(--muted); font-weight: 600; }
   .signals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
+  :root { --pad: max(20px, env(safe-area-inset-left, 0px)); --padr: max(20px, env(safe-area-inset-right, 0px)); }
   .lanes, .cols { grid-template-columns: 1fr; }
   #try { flex-direction: column; }
   #send { min-height: 56px; }
@@ -152,8 +153,20 @@ th { font-size: 14px; color: var(--muted); font-weight: 600; }
 }
 @media (max-width: 520px) {
   .bar nav a:first-child { display: none; }
-  .picks { grid-template-columns: 1fr; }
-  .picks label > span { min-height: 54px; }
-  .lane header p { font-size: 13px; }
+  .top { padding-top: 12px; padding-bottom: 14px; }
+  h1 { font-size: 2.3rem; }
+  .lede { font-size: 15.5px; margin-top: 10px; }
+  .picks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .picks label > span { min-height: 50px; padding: 8px 10px; }
+  .picks b { font-size: 14px; }
+  .picks i { display: none; }
+  .own span input[type=text] { font-size: 14px; }
+  #send { min-height: 52px; }
+  .lanes { display: flex; flex-direction: column; }
+  .lane.screened { order: -1; }
+  .lane header p { display: none; }
+  .lane { padding: 14px 16px 0; }
+  .steps > li { padding: 7px 0; }
+  .wallet { padding-top: 28px; padding-bottom: 28px; }
 }
 @media (prefers-reduced-motion: reduce) { li[data-s=run] .dot { animation: none; } }
