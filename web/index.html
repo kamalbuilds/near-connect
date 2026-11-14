@@ -5,6 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Screen for NEAR Connect</title>
 <meta name="description" content="Screen stops a bad NEAR transaction before any wallet sees it. Try it on testnet with no wallet and no funds.">
+<meta name="theme-color" content="#0e1512">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Screen">
+<meta property="og:title" content="Screen stops a bad NEAR transaction before any wallet sees it">
+<meta property="og:description" content="Same send, two wallets. Without Screen 0.01 NEAR reached an OFAC-listed address. With Screen the wallet was asked 0 times. Recorded on testnet.">
+<meta property="og:url" content="https://near-screen.earn-shield-alerts.workers.dev/">
+<meta property="og:image" content="https://near-screen.earn-shield-alerts.workers.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Two lanes for the same NEAR transaction. Without Screen the funds reached a sanctioned address. With Screen the request stopped at the gate and the wallet was asked 0 times.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Screen stops a bad NEAR transaction before any wallet sees it">
+<meta name="twitter:description" content="Same send, two wallets. Without Screen the funds landed. With Screen the wallet was asked 0 times.">
+<meta name="twitter:image" content="https://near-screen.earn-shield-alerts.workers.dev/og.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/style.css">
@@ -37,16 +53,22 @@
   <div class="lanes">
     <article class="lane plain" id="lane-plain" aria-live="polite">
       <header><div><h2>Without Screen</h2><p>Connector as it ships today</p></div><div class="tally"><b id="n-plain">0</b><span id="cap-plain">Wallet signing requests</span></div></header>
-      <ol class="steps" id="steps-plain"></ol>
+      <div class="track"><ol class="steps" id="steps-plain"></ol><span class="pkt" id="pkt-plain" aria-hidden="true"></span></div>
       
     </article>
     <article class="lane screened" id="lane-screen" aria-live="polite">
       <header><div><h2>With Screen</h2><p>Same connector, one option added</p></div><div class="tally"><b id="n-screen">0</b><span>Wallet signing requests</span></div></header>
-      <ol class="steps" id="steps-screen"></ol>
+      <div class="track"><ol class="steps" id="steps-screen"></ol><span class="gate" id="gate-screen" aria-hidden="true"></span><span class="pkt" id="pkt-screen" aria-hidden="true"></span></div>
       
     </article>
   </div>
+  <ul class="prov" aria-label="Where Screen's answer comes from">
+    <li><b id="p-ofac">OFAC SDN list</b><span id="p-ofac-d"></span></li>
+    <li><b id="p-near">NEAR lookalike list</b><span id="p-near-d"></span></li>
+    <li><b id="p-block">Reading the latest testnet block</b><span id="p-block-d">Screen reads the chain on every check.</span></li>
+  </ul>
   <p id="summary" role="status"></p>
+  <a id="share" class="share" href="#" target="_blank" rel="noreferrer" hidden>Post this result on X</a>
 </section>
 
 <section class="wallet" id="wallet">
@@ -81,7 +103,7 @@
       <tr><td>Test contract deployed for the screening suite</td><td><a href="https://testnet.nearblocks.io/txns/CtETQWtj7Sqc22PkrWzCvw1k4gF4d3DcgKm2puy9MJCF" target="_blank" rel="noreferrer">CtETQW…MJCF</a></td></tr>
       <tr><td>Judge account that signs the demo sends</td><td><a href="https://testnet.nearblocks.io/address/screen-sponsor-1114.testnet" target="_blank" rel="noreferrer">screen-sponsor-1114.testnet</a></td></tr>
       <tr><td>Screening suite, including clean-recipient and lookalike must-pass cases</td><td><code>scripts/screen-test.sh</code></td></tr>
-      <tr><td>Latency added to the sign path</td><td><code>scripts/screen-latency.sh mainnet</code>, list lookups decide in under 1 ms, a full on-chain check takes a median 0.5 s</td></tr>
+      <tr><td>Latency added to the sign path</td><td><code>scripts/screen-latency.sh mainnet</code>, median 0.5 s, under 1 ms for non-NEAR recipients</td></tr>
       <tr><td>Upstream proposal</td><td><a href="https://github.com/azbang/near-connect/pull/123" target="_blank" rel="noreferrer">azbang/near-connect#123</a></td></tr>
     </tbody>
   </table></div>

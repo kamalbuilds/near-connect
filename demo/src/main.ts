@@ -1,6 +1,8 @@
 import { screenAndSend, screenTransaction, ScreenBlockedError, type ScreenCheck } from "../../src/screen/index";
 import { NearConnector } from "../../src/NearConnector";
 import type { ScreenOptions } from "../../src/types";
+import ofacList from "../../src/screen/sanctioned-addresses-2026-11-09.json";
+import nearList from "../../src/screen/near-account-addresses-2026-11-01.json";
 
 // The connector reads testnet through the drpc endpoint. Route it through this site's relay so the page never
 // makes a cross-origin chain read.
@@ -18,7 +20,8 @@ const PRESETS: Record<string, string> = {
 let fresh: { account: string; explorer: string } | null = null;
 // A real unscreened send to the sanctioned address, made through this same page. Its block is read back from testnet on load.
 const RECORDED = { tx: "ESjrFydusjWtGKSjmT2zkN2ZbPsfGVxSYMZG1qMpvTTY", from: "screen-sponsor-1114.testnet" };
-let recorded: { height: number; when: string } | null = null;
+// Read back from testnet on 2026-11-14 (block 3K5k7Xo2…38kK); the page refreshes it from the chain on load.
+let recorded: { height: number; when: string } | null = { height: 277598109, when: "2026-11-14 02:51 UTC" };
 let ran = false;
 const AMOUNT_YOCTO = "10000000000000000000000";
 const OPTIONS: ScreenOptions = {};
@@ -52,6 +55,85 @@ const browserToken = (() => {
 })();
 
 const steps: Record<Lane, Step[]> = { plain: [], screen: [] };
+
+// The request travels down each lane. It rides the rail from the app step to wherever that lane's real state has reached:
+// the end of the line (funds landed) or the Screen gate (stopped, wallet never contacted).
+let launched = false;
+const place = (lane: Lane) => {
+  const items = Array.from($(`steps-${lane}`).children) as HTMLElement[];
+  const pkt = $(`pkt-${lane}`);
+  const gate = document.getElementById(`gate-${lane}`);
+  const st = steps[lane];
+  if (items.length < 4) return;
+  const center = (i: number) => items[i].offsetTop + 22;
+  const on = (s: Step | undefined, ...states: StepState[]) => !!s && states.includes(s.state);
+  let idx = -1;
+  let end = "";
+  let atGate = false;
+  if (lane === "plain") {
+    if (on(st[3], "pass", "bad")) { idx = 3; end = st[3].state === "bad" ? "landed" : "ok"; }
+    else if (on(st[2], "run", "pass", "bad")) idx = 2;
+  } else if (on(st[1], "block")) {
+    atGate = true; idx = 1; end = "stopped";
+  } else if (launched) {
+    if (on(st[3], "pass")) { idx = 3; end = "ok"; }
+    else if (on(st[2], "run", "pass")) idx = 2;
+    else if (on(st[1], "warn", "run")) idx = 1;
+  }
+  const visible = idx >= 0;
+  pkt.dataset.on = visible ? "1" : "0";
+  if (gate) gate.dataset.on = atGate ? "1" : "0";
+  if (!visible) return;
+  const size = end === "landed" ? 22 : 12;
+  const y = atGate ? items[2].offsetTop - 6 : center(idx) - size / 2;
+  pkt.style.setProperty("--y", `${y}px`);
+  pkt.dataset.end = end;
+  if (atGate && gate) gate.style.setProperty("--y", `${items[2].offsetTop - 2}px`);
+};
+const launch = () => {
+  launched = true;
+  (["plain", "screen"] as Lane[]).forEach((lane) => {
+    const items = Array.from($(`steps-${lane}`).children) as HTMLElement[];
+    if (items.length < 4) return;
+    const pkt = $(`pkt-${lane}`);
+    const gate = document.getElementById(`gate-${lane}`);
+    pkt.dataset.snap = "1";
+    if (gate) gate.dataset.snap = "1";
+    pkt.dataset.end = "";
+    pkt.dataset.on = "1";
+    if (gate) gate.dataset.on = "0";
+    pkt.style.setProperty("--y", `${items[0].offsetTop + 22 - 6}px`);
+    void pkt.offsetWidth;
+    delete pkt.dataset.snap;
+    if (gate) delete gate.dataset.snap;
+  });
+};
+window.addEventListener("resize", () => { place("plain"); place("screen"); });
+void document.fonts?.ready.then(() => { place("plain"); place("screen"); });
+
+const fmtInt = (n: number) => n.toLocaleString("en-US");
+const showLists = () => {
+  const eth = (ofacList as any).addresses.filter((a: any) => a.address.startsWith("0x")).length;
+  $("p-ofac").textContent = `OFAC sanctions list of ${(ofacList as any).updatedAt}`;
+  $("p-ofac-d").textContent = `${fmtInt((ofacList as any).addresses.length)} addresses, ${eth} in the Ethereum format NEAR accepts`;
+  $("p-near").textContent = `NEAR lookalike list of ${(nearList as any).version}`;
+  $("p-near-d").textContent = `${fmtInt((nearList as any).addresses.length)} flagged token accounts, each with an evidence link`;
+};
+const readBlock = async () => {
+  try {
+    const response = await fetch("/api/rpc", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ method: "block", params: { finality: "final" } }) });
+    const header = (await response.json()).result.header;
+    const when = new Date(Number(header.timestamp_nanosec) / 1e6).toISOString().slice(11, 19);
+    const b = $("p-block");
+    b.removeAttribute("data-skeleton");
+    b.textContent = `Chain read at testnet block ${fmtInt(Number(header.height))}`;
+    $("p-block-d").textContent = `${when} UTC. Account age, contract code and keys are read live on every check.`;
+  } catch {
+    $("p-block-d").textContent = "The block read will retry on the next check.";
+  }
+};
+showLists();
+$("p-block").setAttribute("data-skeleton", "");
 const render = (lane: Lane, verdictHtml = "") => {
   const list = $<HTMLOListElement>(`steps-${lane}`);
   list.innerHTML = steps[lane]
@@ -65,6 +147,7 @@ const render = (lane: Lane, verdictHtml = "") => {
   $("s-plain").className = $("n-plain").className;
   $("s-screen").className = $("n-screen").className;
   $("cap-plain").textContent = !ran && counts.plain > 0 ? "Wallet signing requests, recorded run" : "Wallet signing requests";
+  place(lane);
 };
 
 const recipientNow = () => {
@@ -147,6 +230,8 @@ const runCheck = async () => {
   if (document.querySelector<HTMLInputElement>('input[name="pick"]:checked')?.value === "fresh" && !(await ensureFresh(token))) return;
   const recipient = recipientNow();
   latest = null;
+  launched = false;
+  $<HTMLAnchorElement>("share").hidden = true;
   const base = idleSteps(recipient || "…");
   steps.plain = base.plain;
   steps.screen = base.screen;
@@ -169,6 +254,7 @@ const runCheck = async () => {
     const checks = await screenTransaction({ receiverId: recipient, actions: [{ type: "Transfer", params: { deposit: AMOUNT_YOCTO } }] }, "testnet", walletAccount ?? signer, OPTIONS);
     if (token !== checkToken) return;
     applyCheck(recipient, checks, performance.now() - started);
+    void readBlock();
   } catch (error) {
     if (token !== checkToken) return;
     steps.screen[1] = { state: "bad", title: "Screen could not read the chain", detail: "Testnet did not answer. Pick the recipient again to retry." };
@@ -267,6 +353,21 @@ const summarize = (recipient: string, plain: Awaited<ReturnType<typeof runPlain>
   }
 };
 
+const setShare = (recipient: string, plain: Awaited<ReturnType<typeof runPlain>>) => {
+  if (!plain.ok || !latest) return;
+  const verdict = verdictOf(latest.checks);
+  const took = fmtMs(latest.ms);
+  const proof = NEARBLOCKS + plain.result.txHash;
+  const text = verdict === "block"
+    ? `Screen blocked a NEAR send to ${short(recipient)} in ${took}. The wallet was asked ${counts.screen} times. The same send without Screen landed on testnet: ${proof}`
+    : verdict === "warn"
+      ? `Screen stopped a NEAR send to ${short(recipient)} for a human to confirm before the wallet signed. Without Screen the wallet signed with no warning: ${proof}`
+      : `Screen cleared a NEAR send to ${short(recipient)} in ${took}, no slowdown, no extra prompt: ${proof}`;
+  const link = $<HTMLAnchorElement>("share");
+  link.href = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(location.origin + "/")}`;
+  link.hidden = false;
+};
+
 $("try").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy) return;
@@ -284,10 +385,13 @@ $("try").addEventListener("submit", async (event) => {
   button.disabled = true;
   button.textContent = "Sending";
   $("summary").textContent = "";
+  $<HTMLAnchorElement>("share").hidden = true;
   try {
     if (!latest || latest.recipient !== recipient) await runCheck();
+    launch();
     const [plain, screen] = await Promise.all([runPlain(recipient), runScreen(recipient)]);
     summarize(recipient, plain, screen);
+    setShare(recipient, plain);
   } finally {
     busy = false;
     button.disabled = false;
