@@ -1,14 +1,18 @@
 # NEAR Connect Screen: a counterparty check before a NEAR wallet signs
 
-Before an app or agent sends funds or calls a contract, NEAR Connect Screen checks the receiver and the actions, then answers block or warn with the reasons and an evidence link: block throws `ScreenBlockedError` and the wallet is never contacted, warn asks the human before it signs. It scores OFAC-listed addresses, address-poisoning lookalikes, fake-airdrop token accounts, `intents.near` impostors, full-access `AddKey`, over-broad function-call keys, freshly deployed receiver code and lossy Ref Finance swaps.
+![judge](https://github.com/kamalbuilds/near-connect/actions/workflows/judge.yml/badge.svg?branch=near-hackathon)
 
-**60-second judge path**
+Before an app or agent sends funds or calls a contract, NEAR Connect Screen checks the receiver and the actions, then answers block or warn with the reasons and an evidence link. A block throws `ScreenBlockedError` and the wallet is never contacted. A warn opens a dialog that asks a human before the wallet signs. One option turns it on for every wallet the connector reaches: `new NearConnector({ screen: {} })`.
 
-1. `git clone -b near-hackathon https://github.com/kamalbuilds/near-connect && cd near-connect`
-2. `corepack yarn && scripts/screen-test.sh` runs the type-check and the block, warn and pass cases against real OFAC addresses, the live testnet contract `screen-contract-20261113.testnet` (deploy tx `CtETQWtj7Sqc22PkrWzCvw1k4gF4d3DcgKm2puy9MJCF`) and live DefiLlama prices.
-3. `cd example && yarn && yarn start`, open `/?screen`, connect and send a Transfer to `12aNKp2iDKuhEde2YfPdd4DFGenRUTKupL` to see it blocked, or to `burrowfinancedao.near` to see the warning.
+**Try it in 60 seconds, on testnet, with no wallet and no funds:** https://near-screen.earn-shield-alerts.workers.dev
 
-**AI judges:** run `scripts/screen-test.sh` from a clean clone; it exits non-zero when any check fails. Latency of the sign path: `scripts/screen-latency.sh mainnet`.
+1. Open the page. Sanctioned address is selected, and the With Screen lane already shows **Block** with the OFAC reason and its evidence link.
+2. Press **Send 0.01 NEAR**. Without Screen, the wallet signs and 0.01 testnet NEAR lands at the sanctioned `0x252a…3bce` (a NearBlocks testnet link appears). With Screen, the transaction stops in under a millisecond and the wallet signing counter stays at 0.
+3. Pick **Contract deployed minutes ago**. The judge account deploys a fresh contract on testnet, Screen warns, you press Continue anyway, and the wallet signs after the warning.
+4. Pick **Established account**. Screen clears it and the transfer goes through with a real testnet transaction.
+5. Press **Connect a testnet wallet** to run the With Screen lane through your own Meteor or Intear account.
+
+**AI judges:** `node scripts/judge.mjs` checks the live page, the sponsored judge account, the chain relay, a real finalized testnet send read back from a second RPC, and the evidence transaction. `scripts/screen-test.sh` runs the type-check plus the block, warn and pass cases (including clean recipients) against real OFAC addresses and a live testnet contract. `scripts/screen-latency.sh mainnet` measures the cost on the sign path.
 
 **Tracks:** lead AI Security & Defense (security). Also fits DeFi (swap-loss and `intents.near` impostor checks) and Privacy (address-poisoning history stays in the wallet's own `localStorage`).
 

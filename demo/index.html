@@ -28,7 +28,7 @@
       <label><input type="radio" name="pick" value="sanctioned" checked><span><b>Sanctioned address</b><i>OFAC list, 0x252a…3bce</i></span></label>
       <label><input type="radio" name="pick" value="fresh"><span><b>Contract deployed minutes ago</b><i>deployed on testnet when you pick it</i></span></label>
       <label><input type="radio" name="pick" value="clean"><span><b>Established account</b><i>guest-book.testnet</i></span></label>
-      <label class="own"><input type="radio" name="pick" value="own"><span><b>Any account</b><input id="own" type="text" inputmode="url" spellcheck="false" placeholder="name.testnet or 0x address" aria-label="Any testnet account"></span></label>
+      <label class="own"><input type="radio" name="pick" value="own"><span><b>Any account</b><input id="own" type="text" inputmode="url" spellcheck="false" placeholder="name.testnet" aria-label="Any testnet account"></span></label>
     </fieldset>
     <button id="send" type="submit">Send 0.01 NEAR</button>
   </form>
@@ -51,7 +51,7 @@
 <section class="wallet" id="wallet">
   <div>
     <h2>Use your own testnet wallet</h2>
-    <p>Connect Meteor, Intear or MyNearWallet on testnet. The With Screen lane then asks your wallet to sign, and Screen still answers first.</p>
+    <p>Connect Meteor, Intear or any wallet that lists testnet. The With Screen lane then asks your wallet to sign, and Screen still answers first.</p>
   </div>
   <div class="walletctl"><button id="connect" type="button">Connect a testnet wallet</button><p id="walletstate" role="status"></p></div>
 </section>
