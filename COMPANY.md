@@ -32,7 +32,7 @@ Before an agent or app sends funds or calls a contract, NEAR Connect Screen chec
 
 ## Try it in 60 seconds
 
-Open https://near-screen.nearbuild.workers.dev. The With Screen lane already shows Block for the sanctioned address. Press Send 0.01 NEAR and watch the request travel down both lanes: the unscreened lane delivers the funds with a testnet transaction link, the screened lane stops at the Screen gate and keeps the wallet at zero requests. The provenance strip shows the list dates, address counts and the testnet block read. Pick the other two recipients for the warn and clear paths.
+Open https://near-screen.nearlive.workers.dev. The With Screen lane already shows Block for the sanctioned address. Press Send 0.01 NEAR and watch the request travel down both lanes: the unscreened lane delivers the funds with a testnet transaction link, the screened lane stops at the Screen gate and keeps the wallet at zero requests. The provenance strip shows the list dates, address counts and the testnet block read. Pick the other two recipients for the warn and clear paths.
 
 ## Why NEAR
 
