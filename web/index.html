@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screen for NEAR Connect</title>
+<meta name="description" content="Screen stops a bad NEAR transaction before any wallet sees it. Try it on testnet with no wallet and no funds.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="bar">
+  <a class="mark" href="/" aria-label="Screen"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect width="22" height="22" fill="currentColor"/><rect x="3" y="9" width="16" height="4" fill="var(--stop)"/></svg>Screen</a>
+  <nav><a href="#how">How it works</a><a href="#evidence">Evidence</a><a href="https://github.com/azbang/near-connect/pull/123" target="_blank" rel="noreferrer">Pull request</a></nav>
+</header>
+
+<main>
+<section class="top">
+  <h1>Screen stops a bad transaction before any wallet sees it.</h1>
+  <p class="lede">Send 0.01 testnet NEAR to a recipient below. The same app, the same wallet, with and without Screen. The judge account signs on testnet, so you need no wallet and no funds.</p>
+</section>
+
+<section class="stage" aria-label="Try Screen on NEAR testnet">
+  <form id="try" autocomplete="off">
+    <fieldset class="picks">
+      <legend>Send 0.01 NEAR to</legend>
+      <label><input type="radio" name="pick" value="sanctioned" checked><span><b>Sanctioned address</b><i>OFAC list, 0x252a…3bce</i></span></label>
+      <label><input type="radio" name="pick" value="fresh"><span><b>Contract deployed this week</b><i>screen-fresh-1114.testnet</i></span></label>
+      <label><input type="radio" name="pick" value="clean"><span><b>Established account</b><i>guest-book.testnet</i></span></label>
+      <label class="own"><input type="radio" name="pick" value="own"><span><b>Any account</b><input id="own" type="text" inputmode="url" spellcheck="false" placeholder="name.testnet or 0x address" aria-label="Any testnet account"></span></label>
+    </fieldset>
+    <button id="send" type="submit">Send 0.01 NEAR</button>
+  </form>
+
+  <div class="lanes">
+    <article class="lane plain" id="lane-plain" aria-live="polite">
+      <header><h2>Without Screen</h2><p>Connector as it ships today</p></header>
+      <ol class="steps" id="steps-plain"></ol>
+      <footer><span>Wallet signing requests</span><b id="n-plain">0</b></footer>
+    </article>
+    <article class="lane screened" id="lane-screen" aria-live="polite">
+      <header><h2>With Screen</h2><p>One option: <code>new NearConnector({ screen: {} })</code></p></header>
+      <ol class="steps" id="steps-screen"></ol>
+      <footer><span>Wallet signing requests</span><b id="n-screen">0</b></footer>
+    </article>
+  </div>
+  <p id="summary" role="status"></p>
+</section>
+
+<section class="wallet" id="wallet">
+  <div>
+    <h2>Use your own testnet wallet</h2>
+    <p>Connect Meteor, Intear or MyNearWallet on testnet. The With Screen lane then asks your wallet to sign, and Screen still answers first.</p>
+  </div>
+  <div class="walletctl"><button id="connect" type="button">Connect a testnet wallet</button><p id="walletstate" role="status"></p></div>
+</section>
+
+<section class="how" id="how">
+  <h2>One option on the connector. Every wallet inherits it.</h2>
+  <div class="cols">
+    <p>Screen sits in NEAR Connect, between your app and the wallet. It reads the receiver and every action in the transaction, so Meteor, Intear, MyNearWallet and any sandboxed, injected or parent-frame wallet are covered by the same check.</p>
+    <p>A block throws <code>ScreenBlockedError</code> and the wallet is never contacted. A warn opens a dialog that asks a human before the wallet signs. A clear result passes straight through.</p>
+  </div>
+  <ul class="signals">
+    <li><b>OFAC sanctioned addresses</b>1,081 digital-currency addresses from the Treasury SDN list, 137 of them Ethereum-format addresses that NEAR accepts as accounts.</li>
+    <li><b>Fake-airdrop token accounts</b>From the Mimicwatch for NEAR list, each with an evidence link.</li>
+    <li><b>Address poisoning</b>Recipients that imitate an address this wallet sent to before.</li>
+    <li><b>Imitated contracts</b>Receivers that look like intents.near, wrap.near, v2.ref-finance.near or usdt.tether-token.near.</li>
+    <li><b>New or changed contracts</b>Receivers whose account or code is newer than the freshness window.</li>
+    <li><b>Dangerous keys and swaps</b>Full-access AddKey, wide function-call keys, and Ref swaps with a far-below-market minimum output.</li>
+  </ul>
+</section>
+
+<section class="evidence" id="evidence">
+  <h2>Proof, all on testnet</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Fact</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>Test contract deployed for the screening suite</td><td><a href="https://testnet.nearblocks.io/txns/CtETQWtj7Sqc22PkrWzCvw1k4gF4d3DcgKm2puy9MJCF" target="_blank" rel="noreferrer">CtETQW…MJCF</a></td></tr>
+      <tr><td>Judge account that signs the demo sends</td><td><a href="https://testnet.nearblocks.io/address/screen-sponsor-1114.testnet" target="_blank" rel="noreferrer">screen-sponsor-1114.testnet</a></td></tr>
+      <tr><td>Screening suite, including clean-recipient and lookalike must-pass cases</td><td><code>scripts/screen-test.sh</code></td></tr>
+      <tr><td>Latency added to the sign path</td><td><code>scripts/screen-latency.sh mainnet</code>, median 0.5 s, under 1 ms for non-NEAR recipients</td></tr>
+      <tr><td>Upstream proposal</td><td><a href="https://github.com/azbang/near-connect/pull/123" target="_blank" rel="noreferrer">azbang/near-connect#123</a></td></tr>
+    </tbody>
+  </table></div>
+</section>
+</main>
+<footer class="close"><span>Screen</span><p>A pre-sign check for NEAR Connect. Testnet demo.</p></footer>
+<script src="/app.js" defer></script>
+</body>
+</html>

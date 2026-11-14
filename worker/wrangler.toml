@@ -1,0 +1,23 @@
+name = "near-screen"
+main = "src/index.mjs"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "../web"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+
+[vars]
+SPONSOR_ID = "screen-sponsor-1114.testnet"
+SPONSOR_PUBLIC_KEY = "ed25519:7RjCgGWwmZtuoaE4LiRPawwxn84oir8saP1sAPf9sokA"
+SENDS_PER_BROWSER_DAY = "24"
+SENDS_GLOBAL_DAY = "400"
+
+[[durable_objects.bindings]]
+name = "STATE"
+class_name = "ScreenState"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ScreenState"]

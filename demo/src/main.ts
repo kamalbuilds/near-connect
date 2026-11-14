@@ -1,0 +1,270 @@
+import { screenAndSend, screenTransaction, ScreenBlockedError, type ScreenCheck } from "../../src/screen/index";
+import { NearConnector } from "../../src/NearConnector";
+import type { ScreenOptions } from "../../src/types";
+
+// The connector reads testnet through the drpc endpoint. Route it through this site's relay so the page never
+// makes a cross-origin chain read.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  return url.startsWith("https://near-testnet.drpc.org") ? nativeFetch("/api/rpc", init) : nativeFetch(input, init);
+};
+
+const PRESETS: Record<string, string> = {
+  sanctioned: "0x252a8bd2319d8a555b872990601221b3a2053bce",
+  fresh: "screen-fresh-1114.testnet",
+  clean: "guest-book.testnet",
+};
+const AMOUNT_YOCTO = "10000000000000000000000";
+const OPTIONS: ScreenOptions = { contractFreshnessHours: 168 };
+const NEARBLOCKS = "https://testnet.nearblocks.io/txns/";
+
+type StepState = "idle" | "run" | "pass" | "block" | "warn" | "skip" | "bad";
+interface Step { state: StepState; title: string; detail?: string; html?: string }
+type Lane = "plain" | "screen";
+
+const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+const short = (id: string) => (id.length > 26 ? `${id.slice(0, 10)}…${id.slice(-6)}` : id);
+const mark: Record<StepState, string> = { idle: "", run: "", pass: "✓", block: "×", warn: "!", skip: "–", bad: "×" };
+
+let signer = "screen-sponsor-1114.testnet";
+let walletAccount: string | null = null;
+let connector: NearConnector | null = null;
+const counts: Record<Lane, number> = { plain: 0, screen: 0 };
+let busy = false;
+let checkToken = 0;
+let latest: { recipient: string; checks: ScreenCheck[]; ms: number } | null = null;
+
+const browserToken = (() => {
+  const make = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(36).padStart(2, "0")).join("");
+  try {
+    const key = "screen.browser";
+    return localStorage.getItem(key) ?? (localStorage.setItem(key, make()), localStorage.getItem(key) ?? make());
+  } catch {
+    return make();
+  }
+})();
+
+const steps: Record<Lane, Step[]> = { plain: [], screen: [] };
+const render = (lane: Lane, verdictHtml = "") => {
+  const list = $<HTMLOListElement>(`steps-${lane}`);
+  list.innerHTML = steps[lane]
+    .map((s, i) => `<li data-s="${s.state}"><span class="dot" aria-hidden="true">${mark[s.state]}</span><div><div class="t">${esc(s.title)}</div>${s.detail || s.html ? `<div class="d">${s.html ?? esc(s.detail!)}</div>` : ""}${i === 1 && lane === "screen" ? verdictHtml : ""}</div></li>`)
+    .join("");
+  $(`n-${lane}`).textContent = String(counts[lane]);
+};
+
+const recipientNow = () => {
+  const pick = (document.querySelector<HTMLInputElement>('input[name="pick"]:checked')?.value ?? "sanctioned") as string;
+  return pick === "own" ? $<HTMLInputElement>("own").value.trim().toLowerCase() : PRESETS[pick];
+};
+
+const verdictOf = (checks: ScreenCheck[]) => (checks.some((c) => c.level === "block") ? "block" : checks.some((c) => c.level === "warn") ? "warn" : "clear");
+const verdictHtml = (checks: ScreenCheck[], ms: number) => {
+  const v = verdictOf(checks);
+  const label = v === "block" ? "Block" : v === "warn" ? "Warn" : "Clear";
+  const items = checks.map((c) => `<li>${esc(c.reason)} <a href="${esc(c.evidence_url)}" target="_blank" rel="noreferrer">Evidence</a></li>`).join("");
+  return `<div class="verdict" data-v="${v}"><div class="head"><span class="chip">${label}</span><span>decided in ${ms} ms</span></div><ul>${items}</ul></div>`;
+};
+
+const idleSteps = (recipient: string): Record<Lane, Step[]> => ({
+  plain: [
+    { state: "pass", title: "App sends 0.01 NEAR", detail: `to ${short(recipient)}` },
+    { state: "skip", title: "Screening", detail: "Not installed. Nothing reads the recipient." },
+    { state: "idle", title: "Wallet asked to sign", detail: "Waiting for your send." },
+    { state: "idle", title: "Testnet transaction", detail: "Not sent yet." },
+  ],
+  screen: [
+    { state: "pass", title: "App sends 0.01 NEAR", detail: `to ${short(recipient)}` },
+    { state: "run", title: "Screen checks the recipient", detail: "Reading OFAC and NEAR account lists, contract history." },
+    { state: "idle", title: "Wallet asked to sign", detail: "Waiting for Screen." },
+    { state: "idle", title: "Testnet transaction", detail: "Not sent yet." },
+  ],
+});
+
+const fmtMs = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
+
+const applyCheck = (recipient: string, checks: ScreenCheck[], ms: number) => {
+  const v = verdictOf(checks);
+  const s = steps.screen;
+  s[1] = { state: v === "block" ? "block" : v === "warn" ? "warn" : "pass", title: v === "block" ? "Screen blocks the transaction" : v === "warn" ? "Screen asks a human first" : "Screen clears the recipient" };
+  s[2] = v === "block" ? { state: "skip", title: "Wallet asked to sign", detail: "Never contacted." } : { state: "idle", title: "Wallet asked to sign", detail: v === "warn" ? "After you confirm the warning." : "Waiting for your send." };
+  s[3] = v === "block" ? { state: "skip", title: "Testnet transaction", detail: "Nothing is sent." } : { state: "idle", title: "Testnet transaction", detail: "Not sent yet." };
+  render("screen", verdictHtml(checks, ms));
+  latest = { recipient, checks, ms };
+};
+
+const runCheck = async () => {
+  const recipient = recipientNow();
+  const token = ++checkToken;
+  latest = null;
+  const base = idleSteps(recipient || "…");
+  steps.plain = base.plain;
+  steps.screen = base.screen;
+  $("summary").textContent = "";
+  render("plain");
+  render("screen");
+  if (!recipient) {
+    steps.screen[1] = { state: "idle", title: "Screen checks the recipient", detail: "Enter an account to check." };
+    render("screen");
+    return;
+  }
+  const started = performance.now();
+  try {
+    const checks = await screenTransaction({ receiverId: recipient, actions: [{ type: "Transfer", params: { deposit: AMOUNT_YOCTO } }] }, "testnet", walletAccount ?? signer, OPTIONS);
+    if (token !== checkToken) return;
+    applyCheck(recipient, checks, Math.round(performance.now() - started));
+  } catch (error) {
+    if (token !== checkToken) return;
+    steps.screen[1] = { state: "bad", title: "Screen could not read the chain", detail: "Testnet did not answer. Pick the recipient again to retry." };
+    render("screen");
+  }
+};
+
+interface SendResult { txHash: string; elapsedMs: number }
+const postSend = async (recipient: string): Promise<SendResult> => {
+  const response = await fetch("/api/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ receiverId: recipient, browser: browserToken }) });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(body.error ?? "The judge account could not send."), { status: response.status });
+  return body;
+};
+
+const sendLink = (r: SendResult) => `<a href="${NEARBLOCKS + r.txHash}" target="_blank" rel="noreferrer">${esc(short(r.txHash))}</a> finalized on testnet in ${fmtMs(r.elapsedMs)}`;
+
+const runPlain = async (recipient: string) => {
+  steps.plain[2] = { state: "run", title: "Wallet asked to sign", detail: "Signing on testnet." };
+  steps.plain[3] = { state: "idle", title: "Testnet transaction", detail: "Waiting for the wallet." };
+  counts.plain++;
+  render("plain");
+  const started = performance.now();
+  try {
+    const result = await postSend(recipient);
+    steps.plain[2] = { state: "pass", title: "Wallet signs without a question", detail: `Signed and broadcast by ${signer}.` };
+    steps.plain[3] = { state: latest && verdictOf(latest.checks) === "block" ? "bad" : "pass", title: latest && verdictOf(latest.checks) === "block" ? "Funds reached the flagged recipient" : "Testnet transaction", html: sendLink(result) };
+    render("plain");
+    return { ok: true as const, result, ms: performance.now() - started };
+  } catch (error) {
+    steps.plain[2] = { state: "bad", title: "Wallet asked to sign", detail: (error as Error).message };
+    steps.plain[3] = { state: "skip", title: "Testnet transaction", detail: "Not sent." };
+    render("plain");
+    return { ok: false as const, error: error as Error };
+  }
+};
+
+const runScreen = async (recipient: string) => {
+  const started = performance.now();
+  steps.screen[1] = { state: "run", title: "Screen checks the recipient", detail: "Reading OFAC and NEAR account lists, contract history." };
+  steps.screen[2] = { state: "idle", title: "Wallet asked to sign", detail: "Waiting for Screen." };
+  steps.screen[3] = { state: "idle", title: "Testnet transaction", detail: "Waiting for the wallet." };
+  render("screen");
+  let sent: SendResult | undefined;
+  try {
+    const tx = { receiverId: recipient, actions: [{ type: "Transfer" as const, params: { deposit: AMOUNT_YOCTO } }] };
+    await screenAndSend(OPTIONS, [tx], "testnet", walletAccount ?? signer, async () => {
+      const checks = latest?.recipient === recipient ? latest.checks : [];
+      if (checks.length) applyCheck(recipient, checks, latest!.ms);
+      steps.screen[2] = { state: "run", title: "Wallet asked to sign", detail: walletAccount ? `Waiting for ${short(walletAccount)} to sign.` : "Signing on testnet." };
+      counts.screen++;
+      render("screen", latest ? verdictHtml(latest.checks, latest.ms) : "");
+      if (walletAccount && connector) {
+        const wallet = await connector.wallet();
+        const outcome: any = await wallet.signAndSendTransaction({ receiverId: recipient, actions: tx.actions });
+        const hash = outcome?.transaction?.hash ?? outcome?.transaction_outcome?.id ?? outcome?.txHash ?? "";
+        sent = { txHash: hash, elapsedMs: performance.now() - started };
+        return outcome;
+      }
+      sent = await postSend(recipient);
+      return sent;
+    });
+    steps.screen[2] = { state: "pass", title: "Wallet signs after Screen", detail: walletAccount ? `Signed by ${short(walletAccount)}.` : `Signed and broadcast by ${signer}.` };
+    steps.screen[3] = { state: "pass", title: "Testnet transaction", html: sent!.txHash ? sendLink(sent!) : "Submitted by your wallet." };
+    render("screen", latest ? verdictHtml(latest.checks, latest.ms) : "");
+    return { ok: true as const };
+  } catch (error) {
+    if (error instanceof ScreenBlockedError) {
+      const ms = Math.round(performance.now() - started);
+      applyCheck(recipient, error.checks, latest?.recipient === recipient ? latest.ms : ms);
+      return { ok: false as const, blocked: true as const };
+    }
+    const cancelled = !(error as any).status && counts.screen === 0;
+    steps.screen[2] = cancelled ? { state: "skip", title: "Wallet asked to sign", detail: "Never contacted. You cancelled the warning." } : { state: "bad", title: "Wallet asked to sign", detail: (error as Error).message };
+    steps.screen[3] = { state: "skip", title: "Testnet transaction", detail: "Nothing is sent." };
+    render("screen", latest ? verdictHtml(latest.checks, latest.ms) : "");
+    return { ok: false as const, blocked: false as const, error: error as Error };
+  }
+};
+
+const summarize = (recipient: string, plain: Awaited<ReturnType<typeof runPlain>>, screen: Awaited<ReturnType<typeof runScreen>>) => {
+  const el = $("summary");
+  const verdict = latest ? verdictOf(latest.checks) : "clear";
+  const took = latest ? fmtMs(latest.ms) : "a moment";
+  if (screen.ok && plain.ok) {
+    el.textContent = verdict === "warn"
+      ? `Screen paused for a human before the wallet signed, you continued, and 0.01 NEAR reached ${short(recipient)}. Without Screen the wallet signed with no warning at all.`
+      : `Both lanes sent 0.01 NEAR to ${short(recipient)}. Screen cleared the recipient in ${took} and the wallet was asked once, with nothing to warn about.`;
+  } else if (!screen.ok && "blocked" in screen && screen.blocked && plain.ok) {
+    el.innerHTML = `Without Screen, 0.01 NEAR reached ${esc(short(recipient))} in <a href="${NEARBLOCKS + plain.result.txHash}" target="_blank" rel="noreferrer">${esc(short(plain.result.txHash))}</a>. With Screen it stopped in ${took} and the wallet was asked ${counts.screen} times.`;
+  } else if (!screen.ok && "blocked" in screen && !screen.blocked && !("status" in (screen.error ?? {})) && plain.ok) {
+    el.textContent = `You cancelled Screen's warning, so the wallet was never asked. The unscreened lane sent the same 0.01 NEAR without a pause.`;
+  } else {
+    const err = (!plain.ok && plain.error) || (!screen.ok && "error" in screen && screen.error) || null;
+    el.textContent = err ? err.message : "Cancelled. Screen kept the wallet out of it.";
+  }
+};
+
+$("try").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (busy) return;
+  const recipient = recipientNow();
+  if (!recipient) { $<HTMLInputElement>("own").focus(); return; }
+  busy = true;
+  counts.plain = 0;
+  counts.screen = 0;
+  const button = $<HTMLButtonElement>("send");
+  button.disabled = true;
+  button.textContent = "Sending";
+  $("summary").textContent = "";
+  try {
+    if (!latest || latest.recipient !== recipient) await runCheck();
+    const [plain, screen] = await Promise.all([runPlain(recipient), runScreen(recipient)]);
+    summarize(recipient, plain, screen);
+  } finally {
+    busy = false;
+    button.disabled = false;
+    button.textContent = "Send 0.01 NEAR";
+  }
+});
+
+document.querySelectorAll<HTMLInputElement>('input[name="pick"]').forEach((input) => input.addEventListener("change", () => { if (!busy) void runCheck(); }));
+let typing: number | undefined;
+$<HTMLInputElement>("own").addEventListener("input", () => {
+  const own = document.querySelector<HTMLInputElement>('input[name="pick"][value="own"]')!;
+  own.checked = true;
+  window.clearTimeout(typing);
+  typing = window.setTimeout(() => { if (!busy) void runCheck(); }, 450);
+});
+$<HTMLInputElement>("own").addEventListener("focus", () => { document.querySelector<HTMLInputElement>('input[name="pick"][value="own"]')!.checked = true; });
+
+const walletState = $("walletstate");
+const connect = $<HTMLButtonElement>("connect");
+connect.addEventListener("click", async () => {
+  try {
+    if (!connector) {
+      connector = new NearConnector({ network: "testnet", screen: OPTIONS });
+      connector.on("wallet:signIn", (e: any) => { walletAccount = e.accounts?.[0]?.accountId ?? null; setWallet(); });
+      connector.on("wallet:signOut", () => { walletAccount = null; setWallet(); });
+    }
+    if (walletAccount) { await connector.disconnect(); return; }
+    await connector.connect();
+  } catch (error) {
+    walletState.textContent = "The wallet did not connect. Try again or pick another wallet.";
+  }
+});
+const setWallet = () => {
+  connect.textContent = walletAccount ? "Disconnect" : "Connect a testnet wallet";
+  walletState.textContent = walletAccount ? `Connected as ${walletAccount}. The With Screen lane signs with your wallet.` : "";
+  void runCheck();
+};
+
+fetch("/api/config").then((r) => r.json()).then((c) => { if (c.signer) signer = c.signer; }).catch(() => {}).finally(() => void runCheck());
