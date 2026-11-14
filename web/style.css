@@ -33,7 +33,7 @@ button, input { font: inherit; color: inherit; }
 main { max-width: 1400px; margin: 0 auto; }
 
 .top { padding-top: 22px; padding-bottom: 22px; }
-h1 { font-size: clamp(2.15rem, 5.2vw, 4.9rem); line-height: 1; letter-spacing: -.04em; font-weight: 650; max-width: 14em; }
+h1 { font-size: clamp(2.15rem, 4.4vw, 4.2rem); line-height: 1; letter-spacing: -.04em; font-weight: 650; max-width: 22em; }
 .lede { margin-top: 14px; max-width: 46em; font-size: 18px; color: var(--ink); }
 
 .stage { padding-bottom: 34px; }
@@ -95,9 +95,9 @@ li[data-s=bad] .dot { background: var(--stop-ink); border-color: var(--stop-ink)
 .verdict li { display: block; padding: 0; font-size: 14.5px; line-height: 1.4; color: var(--on-dark); }
 .verdict li a { color: var(--on-dark); font-weight: 600; white-space: nowrap; }
 
-.lane footer { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 0 16px; margin-top: 8px; font-size: 14.5px; color: var(--muted); border-top: 2px solid rgba(128,128,128,.22); }
+.lane footer { display: flex; align-items: baseline; justify-content: space-between; padding: 10px 0 12px; margin-top: 8px; font-size: 14.5px; color: var(--muted); border-top: 2px solid rgba(128,128,128,.22); }
 .screened footer { color: var(--on-dark-muted); }
-.lane footer b { font-size: 52px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1; }
+.lane footer b { font-size: 44px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1; }
 .screened footer b { color: var(--on-dark); }
 
 #summary { margin-top: 14px; font-size: 17px; font-weight: 500; max-width: 64em; min-height: 26px; }
